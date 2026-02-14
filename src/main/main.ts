@@ -183,7 +183,7 @@ function createWindow(): void {
     return;
   }
 
-  void win.loadFile(path.join(__dirname, '../renderer/index.html'));
+  void win.loadFile(path.join(__dirname, '../../renderer/index.html'));
 }
 
 app.whenReady().then(() => {
