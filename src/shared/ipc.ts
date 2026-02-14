@@ -8,15 +8,37 @@ export interface CompareRequest {
   excludeNames?: string[];
 }
 
+export type CompareItemStatus = 'same' | 'different' | 'left_only' | 'right_only';
+
+export interface CompareItem {
+  relativePath: string;
+  status: CompareItemStatus;
+  left?: {
+    size: number;
+    mtimeMs: number;
+  };
+  right?: {
+    size: number;
+    mtimeMs: number;
+  };
+}
+
+export interface CompareSummary {
+  same: number;
+  different: number;
+  leftOnly: number;
+  rightOnly: number;
+}
+
 export interface CompareSuccessResponse {
   ok: true;
   data: {
     request: CompareRequest;
     leftFileCount: number;
     rightFileCount: number;
-    leftSamplePaths: string[];
-    rightSamplePaths: string[];
     appliedExcludeNames: string[];
+    summary: CompareSummary;
+    items: CompareItem[];
     requestId: string;
     generatedAt: string;
   };

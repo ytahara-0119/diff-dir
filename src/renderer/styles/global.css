@@ -118,6 +118,27 @@ button[disabled] {
   overflow: auto;
 }
 
+.result h3 {
+  margin: 0 0 0.5rem;
+}
+
+.result-table-wrap {
+  overflow: auto;
+}
+
+.result-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.result-table th,
+.result-table td {
+  text-align: left;
+  border-bottom: 1px solid #334155;
+  padding: 0.45rem 0.3rem;
+}
+
 @media (max-width: 720px) {
   .drop-grid {
     grid-template-columns: 1fr;
