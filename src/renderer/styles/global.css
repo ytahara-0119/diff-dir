@@ -169,6 +169,12 @@ button[disabled] {
   vertical-align: top;
 }
 
+.line-no {
+  width: 64px;
+  color: #94a3b8;
+  text-align: right;
+}
+
 .row-clickable {
   cursor: pointer;
 }
@@ -219,6 +225,34 @@ button[disabled] {
 
 .diff-row-context {
   background: rgba(15, 23, 42, 0.4);
+}
+
+.diff-row-changed {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+.split-cell-left {
+  border-right: 1px solid #475569;
+}
+
+.split-cell-right {
+  border-left: 1px solid #475569;
+}
+
+.split-cell-added {
+  background: rgba(34, 197, 94, 0.2);
+}
+
+.split-cell-removed {
+  background: rgba(239, 68, 68, 0.24);
+}
+
+.split-cell-context {
+  background: rgba(15, 23, 42, 0.2);
+}
+
+.split-cell-empty {
+  background: rgba(2, 6, 23, 0.35);
 }
 
 .diff-error {

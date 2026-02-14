@@ -12,6 +12,12 @@ type ElectronFile = File & { path?: string };
 type StatusFilter = 'all' | 'same' | 'different' | 'left_only' | 'right_only';
 type SortKey = 'relativePath' | 'status' | 'leftSize' | 'rightSize';
 type SortDirection = 'asc' | 'desc';
+type Side = 'left' | 'right';
+
+interface SplitDiffRow {
+  left?: FileDiffLine;
+  right?: FileDiffLine;
+}
 
 function App(): JSX.Element {
   const [leftPath, setLeftPath] = useState('');
@@ -223,6 +229,10 @@ function App(): JSX.Element {
     return compressContextLines(fileDiff.data.lines, showAllContextLines);
   }, [fileDiff, showAllContextLines]);
 
+  const splitDiffRows = useMemo(() => {
+    return toSplitDiffRows(diffTextView?.lines ?? []);
+  }, [diffTextView]);
+
   return (
     <main className="app">
       <h1>diff-dir</h1>
@@ -418,23 +428,22 @@ function App(): JSX.Element {
               <table className={`result-table ${wrapDiffLine ? '' : 'no-wrap'}`}>
                 <thead>
                   <tr>
-                    <th>Type</th>
                     <th>Left #</th>
+                    <th>Left</th>
                     <th>Right #</th>
-                    <th>Line</th>
+                    <th>Right</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {diffTextView?.lines.map((line, index) => (
-                    <tr
-                      key={`${line.type}-${index}`}
-                      className={buildDiffRowClassName(line.type)}
-                    >
-                      <td>{line.type}</td>
-                      <td>{line.leftLineNumber ?? '-'}</td>
-                      <td>{line.rightLineNumber ?? '-'}</td>
-                      <td>
-                        <code>{line.text || ' '}</code>
+                  {splitDiffRows.map((row, index) => (
+                    <tr key={`split-${index}`} className={buildSplitRowClassName(row)}>
+                      <td className="line-no">{row.left?.leftLineNumber ?? '-'}</td>
+                      <td className={buildSplitCellClass(row.left?.type, 'left')}>
+                        <code>{row.left?.text ?? ' '}</code>
+                      </td>
+                      <td className="line-no">{row.right?.rightLineNumber ?? '-'}</td>
+                      <td className={buildSplitCellClass(row.right?.type, 'right')}>
+                        <code>{row.right?.text ?? ' '}</code>
                       </td>
                     </tr>
                   ))}
@@ -548,14 +557,76 @@ function formatDateTime(value: number | undefined): string {
   return new Date(value).toLocaleString();
 }
 
-function buildDiffRowClassName(type: 'context' | 'added' | 'removed'): string {
-  if (type === 'added') {
-    return 'diff-row-added';
+function buildSplitRowClassName(row: SplitDiffRow): string {
+  if (row.left?.type === 'removed' && row.right?.type === 'added') {
+    return 'diff-row-changed';
   }
-  if (type === 'removed') {
+  if (row.left?.type === 'removed') {
     return 'diff-row-removed';
   }
+  if (row.right?.type === 'added') {
+    return 'diff-row-added';
+  }
   return 'diff-row-context';
+}
+
+function buildSplitCellClass(
+  lineType: FileDiffLine['type'] | undefined,
+  side: Side
+): string {
+  if (!lineType) {
+    return `split-cell split-cell-empty split-cell-${side}`;
+  }
+  return `split-cell split-cell-${lineType} split-cell-${side}`;
+}
+
+function toSplitDiffRows(lines: FileDiffLine[]): SplitDiffRow[] {
+  const rows: SplitDiffRow[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+
+    if (line.type === 'context') {
+      rows.push({ left: line, right: line });
+      index += 1;
+      continue;
+    }
+
+    if (line.type === 'removed') {
+      const removedRun: FileDiffLine[] = [];
+      while (index < lines.length && lines[index].type === 'removed') {
+        removedRun.push(lines[index]);
+        index += 1;
+      }
+
+      const addedRun: FileDiffLine[] = [];
+      while (index < lines.length && lines[index].type === 'added') {
+        addedRun.push(lines[index]);
+        index += 1;
+      }
+
+      const length = Math.max(removedRun.length, addedRun.length);
+      for (let runIndex = 0; runIndex < length; runIndex += 1) {
+        rows.push({
+          left: removedRun[runIndex],
+          right: addedRun[runIndex]
+        });
+      }
+      continue;
+    }
+
+    const addedRun: FileDiffLine[] = [];
+    while (index < lines.length && lines[index].type === 'added') {
+      addedRun.push(lines[index]);
+      index += 1;
+    }
+    for (const addedLine of addedRun) {
+      rows.push({ right: addedLine });
+    }
+  }
+
+  return rows;
 }
 
 function compressContextLines(
