@@ -1,15 +1,72 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { DragEvent, FormEvent } from 'react';
 import type { CompareResponse } from '../shared/ipc';
 
+type PaneSide = 'left' | 'right';
+type ElectronFile = File & { path?: string };
+
 function App(): JSX.Element {
-  const [leftPath, setLeftPath] = useState('/path/to/left');
-  const [rightPath, setRightPath] = useState('/path/to/right');
+  const [leftPath, setLeftPath] = useState('');
+  const [rightPath, setRightPath] = useState('');
+  const [activeDrop, setActiveDrop] = useState<PaneSide | null>(null);
   const [result, setResult] = useState<CompareResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const canCompare = Boolean(leftPath.trim() && rightPath.trim() && !isSubmitting);
+
+  const extractDirectoryPath = (
+    event: DragEvent<HTMLDivElement>
+  ): string | null => {
+    const firstItem = event.dataTransfer.items?.[0] as
+      | (DataTransferItem & {
+          webkitGetAsEntry?: () => { isDirectory?: boolean } | null;
+        })
+      | undefined;
+    const firstFile = event.dataTransfer.files?.[0] as ElectronFile | undefined;
+
+    if (!firstFile?.path) {
+      return null;
+    }
+
+    const entry = firstItem?.webkitGetAsEntry?.();
+    if (entry && entry.isDirectory === false) {
+      return null;
+    }
+
+    return firstFile.path;
+  };
+
+  const updatePath = (side: PaneSide, path: string) => {
+    if (side === 'left') {
+      setLeftPath(path);
+      return;
+    }
+
+    setRightPath(path);
+  };
+
+  const handleDrop = (side: PaneSide) => (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setActiveDrop(null);
+    const droppedPath = extractDirectoryPath(event);
+    if (!droppedPath) {
+      return;
+    }
+    updatePath(side, droppedPath);
+  };
+
+  const handleDragOver =
+    (side: PaneSide) => (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      setActiveDrop(side);
+    };
+
+  const handleDragLeave = () => setActiveDrop(null);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!canCompare) {
+      return;
+    }
     setIsSubmitting(true);
     const response = await window.diffDirApi.runCompare({
       leftPath,
@@ -22,26 +79,48 @@ function App(): JSX.Element {
   return (
     <main className="app">
       <h1>diff-dir</h1>
-      <p>IPC baseline is ready. Send a dummy compare request to Main process.</p>
+      <p>Drop two folders to compare. Merge feature is not included.</p>
       <form className="panel" onSubmit={handleSubmit}>
+        <div className="drop-grid">
+          <section
+            className={`drop-pane ${activeDrop === 'left' ? 'active' : ''}`}
+            onDragOver={handleDragOver('left')}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop('left')}
+          >
+            <h2>Left Folder</h2>
+            <p>{leftPath || 'Drag and drop a folder here'}</p>
+          </section>
+          <section
+            className={`drop-pane ${activeDrop === 'right' ? 'active' : ''}`}
+            onDragOver={handleDragOver('right')}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop('right')}
+          >
+            <h2>Right Folder</h2>
+            <p>{rightPath || 'Drag and drop a folder here'}</p>
+          </section>
+        </div>
         <label>
-          Left Path
+          Left Path (manual)
           <input
             type="text"
             value={leftPath}
             onChange={(event) => setLeftPath(event.target.value)}
+            placeholder="/Users/you/left-folder"
           />
         </label>
         <label>
-          Right Path
+          Right Path (manual)
           <input
             type="text"
             value={rightPath}
             onChange={(event) => setRightPath(event.target.value)}
+            placeholder="/Users/you/right-folder"
           />
         </label>
-        <button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? 'Sending...' : 'Send Dummy Compare Request'}
+        <button type="submit" disabled={!canCompare}>
+          {isSubmitting ? 'Comparing...' : 'Start Compare'}
         </button>
       </form>
       {result ? (
