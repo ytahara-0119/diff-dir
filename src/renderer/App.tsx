@@ -3,6 +3,7 @@ import type { DragEvent, FormEvent } from 'react';
 import type {
   CompareItem,
   CompareResponse,
+  FileDiffLine,
   FileDiffResponse
 } from '../shared/ipc';
 
@@ -20,6 +21,8 @@ function App(): JSX.Element {
   const [selectedItem, setSelectedItem] = useState<CompareItem | null>(null);
   const [fileDiff, setFileDiff] = useState<FileDiffResponse | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
+  const [wrapDiffLine, setWrapDiffLine] = useState(false);
+  const [showAllContextLines, setShowAllContextLines] = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('relativePath');
@@ -93,6 +96,8 @@ function App(): JSX.Element {
     setSortDirection('asc');
     setSelectedItem(null);
     setFileDiff(null);
+    setWrapDiffLine(false);
+    setShowAllContextLines(false);
     setIsSubmitting(false);
   };
 
@@ -111,6 +116,7 @@ function App(): JSX.Element {
     setSelectedItem(item);
     setFileDiff(null);
     setIsLoadingDiff(false);
+    setShowAllContextLines(false);
     if (item.diffKindHint === 'binary') {
       setFileDiff({
         ok: true,
@@ -147,6 +153,13 @@ function App(): JSX.Element {
     setIsLoadingDiff(false);
   };
 
+  const retryFetchDiff = async () => {
+    if (!selectedItem) {
+      return;
+    }
+    await handleSelectItem(selectedItem);
+  };
+
   const visibleItems = useMemo(() => {
     if (!result?.ok) {
       return [];
@@ -168,6 +181,13 @@ function App(): JSX.Element {
 
     return [...filtered].sort((a, b) => compareItems(a, b, sortKey, sortDirection));
   }, [result, searchQuery, sortDirection, sortKey, statusFilter]);
+
+  const diffTextView = useMemo(() => {
+    if (!fileDiff?.ok || fileDiff.data.kind !== 'text') {
+      return null;
+    }
+    return compressContextLines(fileDiff.data.lines, showAllContextLines);
+  }, [fileDiff, showAllContextLines]);
 
   return (
     <main className="app">
@@ -312,10 +332,36 @@ function App(): JSX.Element {
       {selectedItem ? (
         <section className="result">
           <h3>File Diff: {selectedItem.relativePath}</h3>
+          <p className="muted">
+            left: {selectedItem.left?.size ?? '-'} bytes / mtime:{' '}
+            {formatDateTime(selectedItem.left?.mtimeMs)}
+          </p>
+          <p className="muted">
+            right: {selectedItem.right?.size ?? '-'} bytes / mtime:{' '}
+            {formatDateTime(selectedItem.right?.mtimeMs)}
+          </p>
+          <div className="diff-toolbar">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => setWrapDiffLine((current) => !current)}
+            >
+              {wrapDiffLine ? 'Disable Wrap' : 'Enable Wrap'}
+            </button>
+            {diffTextView?.hasCollapsed ? (
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => setShowAllContextLines((current) => !current)}
+              >
+                {showAllContextLines ? 'Hide Long Context' : 'Show All Context'}
+              </button>
+            ) : null}
+          </div>
           {isLoadingDiff ? <p>Loading diff...</p> : null}
           {!isLoadingDiff && fileDiff?.ok && fileDiff.data.kind === 'text' ? (
             <div className="result-table-wrap">
-              <table className="result-table">
+              <table className={`result-table ${wrapDiffLine ? '' : 'no-wrap'}`}>
                 <thead>
                   <tr>
                     <th>Type</th>
@@ -325,8 +371,11 @@ function App(): JSX.Element {
                   </tr>
                 </thead>
                 <tbody>
-                  {fileDiff.data.lines.map((line, index) => (
-                    <tr key={`${line.type}-${index}`}>
+                  {diffTextView?.lines.map((line, index) => (
+                    <tr
+                      key={`${line.type}-${index}`}
+                      className={buildDiffRowClassName(line.type)}
+                    >
                       <td>{line.type}</td>
                       <td>{line.leftLineNumber ?? '-'}</td>
                       <td>{line.rightLineNumber ?? '-'}</td>
@@ -348,7 +397,14 @@ function App(): JSX.Element {
               bytes).
             </p>
           ) : null}
-          {!isLoadingDiff && fileDiff && !fileDiff.ok ? <p>{fileDiff.error.message}</p> : null}
+          {!isLoadingDiff && fileDiff && !fileDiff.ok ? (
+            <div className="diff-error">
+              <p>{fileDiff.error.message}</p>
+              <button type="button" className="ghost-button" onClick={() => void retryFetchDiff()}>
+                Retry
+              </button>
+            </div>
+          ) : null}
         </section>
       ) : null}
     </main>
@@ -421,3 +477,71 @@ function readSortValue(item: CompareItem, sortKey: SortKey): number | string {
 }
 
 export default App;
+
+function formatDateTime(value: number | undefined): string {
+  if (!value) {
+    return '-';
+  }
+  return new Date(value).toLocaleString();
+}
+
+function buildDiffRowClassName(type: 'context' | 'added' | 'removed'): string {
+  if (type === 'added') {
+    return 'diff-row-added';
+  }
+  if (type === 'removed') {
+    return 'diff-row-removed';
+  }
+  return 'diff-row-context';
+}
+
+function compressContextLines(
+  lines: FileDiffLine[],
+  showAll: boolean
+): {
+  lines: FileDiffLine[];
+  hasCollapsed: boolean;
+} {
+  if (showAll) {
+    return { lines, hasCollapsed: false };
+  }
+
+  const maxContextRun = 12;
+  const headKeep = 4;
+  const tailKeep = 4;
+  const collapsed: FileDiffLine[] = [];
+  let index = 0;
+  let hasCollapsed = false;
+
+  while (index < lines.length) {
+    if (lines[index].type !== 'context') {
+      collapsed.push(lines[index]);
+      index += 1;
+      continue;
+    }
+
+    let end = index;
+    while (end < lines.length && lines[end].type === 'context') {
+      end += 1;
+    }
+
+    const runLength = end - index;
+    if (runLength <= maxContextRun) {
+      collapsed.push(...lines.slice(index, end));
+    } else {
+      hasCollapsed = true;
+      collapsed.push(...lines.slice(index, index + headKeep));
+      collapsed.push({
+        type: 'context',
+        text: `... ${runLength - headKeep - tailKeep} context lines hidden ...`
+      });
+      collapsed.push(...lines.slice(end - tailKeep, end));
+    }
+    index = end;
+  }
+
+  return {
+    lines: collapsed,
+    hasCollapsed
+  };
+}
