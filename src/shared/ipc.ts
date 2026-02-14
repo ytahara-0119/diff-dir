@@ -1,6 +1,7 @@
 export const IPC_CHANNELS = {
   runCompare: 'compare:run',
-  getFileDiff: 'compare:file-diff'
+  getFileDiff: 'compare:file-diff',
+  selectDirectory: 'dialog:select-directory'
 } as const;
 
 export interface CompareRequest {
@@ -117,4 +118,5 @@ export type FileDiffResponse = FileDiffSuccessResponse | FileDiffErrorResponse;
 export interface DiffDirApi {
   runCompare: (request: CompareRequest) => Promise<CompareResponse>;
   getFileDiff: (request: FileDiffRequest) => Promise<FileDiffResponse>;
+  selectDirectory: () => Promise<string | null>;
 }

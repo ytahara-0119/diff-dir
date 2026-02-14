@@ -16,5 +16,7 @@ contextBridge.exposeInMainWorld('diffDirApi', {
   runCompare: (request: CompareRequest): Promise<CompareResponse> =>
     ipcRenderer.invoke(IPC_CHANNELS.runCompare, request),
   getFileDiff: (request: FileDiffRequest): Promise<FileDiffResponse> =>
-    ipcRenderer.invoke(IPC_CHANNELS.getFileDiff, request)
+    ipcRenderer.invoke(IPC_CHANNELS.getFileDiff, request),
+  selectDirectory: (): Promise<string | null> =>
+    ipcRenderer.invoke(IPC_CHANNELS.selectDirectory)
 });

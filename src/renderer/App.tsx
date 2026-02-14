@@ -79,26 +79,47 @@ function App(): JSX.Element {
 
   const handleDragLeave = () => setActiveDrop(null);
 
+  const handlePickDirectory = async (side: PaneSide) => {
+    const selectedPath = await window.diffDirApi.selectDirectory();
+    if (!selectedPath) {
+      return;
+    }
+    updatePath(side, selectedPath);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canCompare) {
       return;
     }
     setIsSubmitting(true);
-    const response = await window.diffDirApi.runCompare({
-      leftPath,
-      rightPath
-    });
-    setResult(response);
-    setStatusFilter('all');
-    setSearchQuery('');
-    setSortKey('relativePath');
-    setSortDirection('asc');
-    setSelectedItem(null);
-    setFileDiff(null);
-    setWrapDiffLine(false);
-    setShowAllContextLines(false);
-    setIsSubmitting(false);
+    try {
+      if (!window.diffDirApi?.runCompare) {
+        setResult(
+          createCompareClientError(
+            new Error('Preload bridge is unavailable. Please restart the app.')
+          )
+        );
+        return;
+      }
+      const response = await window.diffDirApi.runCompare({
+        leftPath,
+        rightPath
+      });
+      setResult(response);
+      setStatusFilter('all');
+      setSearchQuery('');
+      setSortKey('relativePath');
+      setSortDirection('asc');
+      setSelectedItem(null);
+      setFileDiff(null);
+      setWrapDiffLine(false);
+      setShowAllContextLines(false);
+    } catch (error: unknown) {
+      setResult(createCompareClientError(error));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSelectItem = async (item: CompareItem) => {
@@ -144,13 +165,26 @@ function App(): JSX.Element {
     }
 
     setIsLoadingDiff(true);
-    const response = await window.diffDirApi.getFileDiff({
-      leftRootPath: leftPath,
-      rightRootPath: rightPath,
-      relativePath: item.relativePath
-    });
-    setFileDiff(response);
-    setIsLoadingDiff(false);
+    try {
+      if (!window.diffDirApi?.getFileDiff) {
+        setFileDiff(
+          createFileDiffClientError(
+            new Error('Preload bridge is unavailable. Please restart the app.')
+          )
+        );
+        return;
+      }
+      const response = await window.diffDirApi.getFileDiff({
+        leftRootPath: leftPath,
+        rightRootPath: rightPath,
+        relativePath: item.relativePath
+      });
+      setFileDiff(response);
+    } catch (error: unknown) {
+      setFileDiff(createFileDiffClientError(error));
+    } finally {
+      setIsLoadingDiff(false);
+    }
   };
 
   const retryFetchDiff = async () => {
@@ -216,6 +250,13 @@ function App(): JSX.Element {
         </div>
         <label>
           Left Path (manual)
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => void handlePickDirectory('left')}
+          >
+            Select Left Folder
+          </button>
           <input
             type="text"
             value={leftPath}
@@ -225,6 +266,13 @@ function App(): JSX.Element {
         </label>
         <label>
           Right Path (manual)
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => void handlePickDirectory('right')}
+          >
+            Select Right Folder
+          </button>
           <input
             type="text"
             value={rightPath}
@@ -569,4 +617,32 @@ function formatOperationError(error: {
 }): string {
   const retry = error.retryable ? 'retry available' : 'retry unlikely to help';
   return `source: ${error.source} / step: ${error.step} / code: ${error.code} / ${retry}`;
+}
+
+function createCompareClientError(error: unknown): CompareResponse {
+  const message = error instanceof Error ? error.message : 'Unknown renderer-side error.';
+  return {
+    ok: false,
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: `Renderer failed to request compare: ${message}`,
+      source: 'compare',
+      step: 'unexpected',
+      retryable: true
+    }
+  };
+}
+
+function createFileDiffClientError(error: unknown): FileDiffResponse {
+  const message = error instanceof Error ? error.message : 'Unknown renderer-side error.';
+  return {
+    ok: false,
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: `Renderer failed to request file diff: ${message}`,
+      source: 'file_diff',
+      step: 'unexpected',
+      retryable: true
+    }
+  };
 }
