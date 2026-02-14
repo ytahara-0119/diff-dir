@@ -1,5 +1,6 @@
 export const IPC_CHANNELS = {
-  runCompare: 'compare:run'
+  runCompare: 'compare:run',
+  getFileDiff: 'compare:file-diff'
 } as const;
 
 export interface CompareRequest {
@@ -54,6 +55,42 @@ export interface CompareErrorResponse {
 
 export type CompareResponse = CompareSuccessResponse | CompareErrorResponse;
 
+export interface FileDiffRequest {
+  leftRootPath: string;
+  rightRootPath: string;
+  relativePath: string;
+}
+
+export type FileDiffLineType = 'context' | 'added' | 'removed';
+
+export interface FileDiffLine {
+  type: FileDiffLineType;
+  text: string;
+  leftLineNumber?: number;
+  rightLineNumber?: number;
+}
+
+export interface FileDiffSuccessResponse {
+  ok: true;
+  data: {
+    relativePath: string;
+    kind: 'text' | 'binary' | 'too_large';
+    lines: FileDiffLine[];
+    maxBytes: number;
+  };
+}
+
+export interface FileDiffErrorResponse {
+  ok: false;
+  error: {
+    code: 'INVALID_INPUT' | 'NOT_FOUND' | 'INTERNAL_ERROR';
+    message: string;
+  };
+}
+
+export type FileDiffResponse = FileDiffSuccessResponse | FileDiffErrorResponse;
+
 export interface DiffDirApi {
   runCompare: (request: CompareRequest) => Promise<CompareResponse>;
+  getFileDiff: (request: FileDiffRequest) => Promise<FileDiffResponse>;
 }
