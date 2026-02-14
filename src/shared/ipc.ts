@@ -54,8 +54,19 @@ export interface CompareSuccessResponse {
 export interface CompareErrorResponse {
   ok: false;
   error: {
-    code: 'INVALID_INPUT' | 'INTERNAL_ERROR';
+    code:
+      | 'INVALID_INPUT'
+      | 'NOT_FOUND'
+      | 'PERMISSION_DENIED'
+      | 'INTERNAL_ERROR';
     message: string;
+    source: 'compare';
+    step:
+      | 'validate_input'
+      | 'scan_directory'
+      | 'classify_result'
+      | 'unexpected';
+    retryable: boolean;
   };
 }
 
@@ -89,8 +100,15 @@ export interface FileDiffSuccessResponse {
 export interface FileDiffErrorResponse {
   ok: false;
   error: {
-    code: 'INVALID_INPUT' | 'NOT_FOUND' | 'INTERNAL_ERROR';
+    code:
+      | 'INVALID_INPUT'
+      | 'NOT_FOUND'
+      | 'PERMISSION_DENIED'
+      | 'INTERNAL_ERROR';
     message: string;
+    source: 'file_diff';
+    step: 'validate_input' | 'read_file' | 'unexpected';
+    retryable: boolean;
   };
 }
 

@@ -328,7 +328,13 @@ function App(): JSX.Element {
           </div>
         </section>
       ) : null}
-      {result && !result.ok ? <pre className="result">{result.error.message}</pre> : null}
+      {result && !result.ok ? (
+        <section className="result error-panel">
+          <h3>Compare Failed</h3>
+          <p>{result.error.message}</p>
+          <p className="muted">{formatOperationError(result.error)}</p>
+        </section>
+      ) : null}
       {selectedItem ? (
         <section className="result">
           <h3>File Diff: {selectedItem.relativePath}</h3>
@@ -399,10 +405,19 @@ function App(): JSX.Element {
           ) : null}
           {!isLoadingDiff && fileDiff && !fileDiff.ok ? (
             <div className="diff-error">
-              <p>{fileDiff.error.message}</p>
-              <button type="button" className="ghost-button" onClick={() => void retryFetchDiff()}>
-                Retry
-              </button>
+              <div>
+                <p>{fileDiff.error.message}</p>
+                <p className="muted">{formatOperationError(fileDiff.error)}</p>
+              </div>
+              {fileDiff.error.retryable ? (
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => void retryFetchDiff()}
+                >
+                  Retry
+                </button>
+              ) : null}
             </div>
           ) : null}
         </section>
@@ -544,4 +559,14 @@ function compressContextLines(
     lines: collapsed,
     hasCollapsed
   };
+}
+
+function formatOperationError(error: {
+  code: string;
+  source: string;
+  step: string;
+  retryable: boolean;
+}): string {
+  const retry = error.retryable ? 'retry available' : 'retry unlikely to help';
+  return `source: ${error.source} / step: ${error.step} / code: ${error.code} / ${retry}`;
 }

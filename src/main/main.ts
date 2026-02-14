@@ -12,6 +12,7 @@ import type {
 import { DEFAULT_EXCLUDED_NAMES, walkDirectory } from './services/walk-directory';
 import { classifyEntries } from './services/classify-compare';
 import { createFileDiff } from './services/file-diff';
+import type { DirectoryEntry } from './services/walk-directory';
 import {
   getDiffKindHint,
   KNOWN_BINARY_EXTENSIONS,
@@ -23,40 +24,51 @@ const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 ipcMain.handle(
   IPC_CHANNELS.runCompare,
   async (_event, request: CompareRequest): Promise<CompareResponse> => {
-    try {
-      if (!request.leftPath || !request.rightPath) {
-        return {
-          ok: false,
-          error: {
-            code: 'INVALID_INPUT',
-            message: 'Both leftPath and rightPath are required.'
-          }
-        };
-      }
+    if (!request.leftPath || !request.rightPath) {
+      return compareError(
+        'INVALID_INPUT',
+        'Both leftPath and rightPath are required.',
+        'validate_input',
+        false
+      );
+    }
 
+    try {
       const leftStats = await stat(request.leftPath);
       const rightStats = await stat(request.rightPath);
       if (!leftStats.isDirectory() || !rightStats.isDirectory()) {
-        return {
-          ok: false,
-          error: {
-            code: 'INVALID_INPUT',
-            message: 'Both paths must point to directories.'
-          }
-        };
+        return compareError(
+          'INVALID_INPUT',
+          'Both paths must point to directories.',
+          'validate_input',
+          false
+        );
       }
+    } catch (error: unknown) {
+      return mapCompareFsError(error, 'validate_input');
+    }
 
-      const appliedExcludeNames = buildExcludeNameList(request.excludeNames);
-      const [leftEntries, rightEntries] = await Promise.all([
+    const appliedExcludeNames = buildExcludeNameList(request.excludeNames);
+    let leftEntries: DirectoryEntry[];
+    let rightEntries: DirectoryEntry[];
+    try {
+      [leftEntries, rightEntries] = await Promise.all([
         walkDirectory(request.leftPath, { excludedNames: appliedExcludeNames }),
         walkDirectory(request.rightPath, { excludedNames: appliedExcludeNames })
       ]);
-      const { items, summary } = classifyEntries(leftEntries, rightEntries);
-      const itemsWithHints = items.map((item) => {
+    } catch (error: unknown) {
+      return mapCompareFsError(error, 'scan_directory');
+    }
+
+    let summary;
+    let itemsWithHints;
+    try {
+      const classified = classifyEntries(leftEntries, rightEntries);
+      summary = classified.summary;
+      itemsWithHints = classified.items.map((item) => {
         if (item.status !== 'different' || !item.left || !item.right) {
           return item;
         }
-
         return {
           ...item,
           diffKindHint: getDiffKindHint(
@@ -66,43 +78,32 @@ ipcMain.handle(
           )
         };
       });
-
-      return {
-        ok: true,
-        data: {
-          request,
-          leftFileCount: leftEntries.length,
-          rightFileCount: rightEntries.length,
-          appliedExcludeNames,
-          diffPolicy: {
-            maxTextDiffBytes: MAX_TEXT_DIFF_BYTES,
-            binaryExtensions: [...KNOWN_BINARY_EXTENSIONS]
-          },
-          summary,
-          items: itemsWithHints,
-          requestId: crypto.randomUUID(),
-          generatedAt: new Date().toISOString()
-        }
-      };
-    } catch (error: unknown) {
-      if (isInvalidInputError(error)) {
-        return {
-          ok: false,
-          error: {
-            code: 'INVALID_INPUT',
-            message: 'Directory path is invalid or inaccessible.'
-          }
-        };
-      }
-
-      return {
-        ok: false,
-        error: {
-          code: 'INTERNAL_ERROR',
-          message: 'Unexpected error while processing compare request.'
-        }
-      };
+    } catch {
+      return compareError(
+        'INTERNAL_ERROR',
+        'Failed to classify comparison results.',
+        'classify_result',
+        true
+      );
     }
+
+    return {
+      ok: true,
+      data: {
+        request,
+        leftFileCount: leftEntries.length,
+        rightFileCount: rightEntries.length,
+        appliedExcludeNames,
+        diffPolicy: {
+          maxTextDiffBytes: MAX_TEXT_DIFF_BYTES,
+          binaryExtensions: [...KNOWN_BINARY_EXTENSIONS]
+        },
+        summary,
+        items: itemsWithHints,
+        requestId: crypto.randomUUID(),
+        generatedAt: new Date().toISOString()
+      }
+    };
   }
 );
 
@@ -112,24 +113,57 @@ ipcMain.handle(
     createFileDiff(request)
 );
 
-function isInvalidInputError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false;
-  }
-
-  const maybeCode = (error as NodeJS.ErrnoException).code;
-  return (
-    maybeCode === 'ENOENT' ||
-    maybeCode === 'ENOTDIR' ||
-    maybeCode === 'EACCES' ||
-    maybeCode === 'EPERM'
-  );
-}
-
 function buildExcludeNameList(customExcludeNames: string[] = []): string[] {
   return Array.from(
     new Set([...DEFAULT_EXCLUDED_NAMES, ...customExcludeNames.map((name) => name.trim())])
   ).filter((name) => name.length > 0);
+}
+
+function compareError(
+  code: 'INVALID_INPUT' | 'NOT_FOUND' | 'PERMISSION_DENIED' | 'INTERNAL_ERROR',
+  message: string,
+  step: 'validate_input' | 'scan_directory' | 'classify_result' | 'unexpected',
+  retryable: boolean
+): CompareResponse {
+  return {
+    ok: false,
+    error: {
+      code,
+      message,
+      source: 'compare',
+      step,
+      retryable
+    }
+  };
+}
+
+function mapCompareFsError(
+  error: unknown,
+  step: 'validate_input' | 'scan_directory'
+): CompareResponse {
+  const code = (error as NodeJS.ErrnoException | undefined)?.code;
+  if (code === 'ENOENT' || code === 'ENOTDIR') {
+    return compareError(
+      'NOT_FOUND',
+      'Directory path was not found. Please verify both folder paths.',
+      step,
+      false
+    );
+  }
+  if (code === 'EACCES' || code === 'EPERM') {
+    return compareError(
+      'PERMISSION_DENIED',
+      'Cannot access one of the selected directories due to permission restrictions.',
+      step,
+      false
+    );
+  }
+  return compareError(
+    'INTERNAL_ERROR',
+    'Unexpected error while running folder comparison.',
+    'unexpected',
+    true
+  );
 }
 
 function createWindow(): void {

@@ -76,20 +76,35 @@ export async function createFileDiff(
         ok: false,
         error: {
           code: 'NOT_FOUND',
-          message: FILE_DIFF_ERROR_MESSAGE.NOT_FOUND
+          message: FILE_DIFF_ERROR_MESSAGE.NOT_FOUND,
+          source: 'file_diff',
+          step: 'read_file',
+          retryable: false
         }
       };
     }
 
     if (code === 'EACCES' || code === 'EPERM' || code === 'ENOTDIR') {
-      return invalidInput(FILE_DIFF_ERROR_MESSAGE.INVALID_INPUT);
+      return {
+        ok: false,
+        error: {
+          code: 'PERMISSION_DENIED',
+          message: FILE_DIFF_ERROR_MESSAGE.INVALID_INPUT,
+          source: 'file_diff',
+          step: 'read_file',
+          retryable: false
+        }
+      };
     }
 
     return {
       ok: false,
       error: {
         code: 'INTERNAL_ERROR',
-        message: FILE_DIFF_ERROR_MESSAGE.INTERNAL_ERROR
+        message: FILE_DIFF_ERROR_MESSAGE.INTERNAL_ERROR,
+        source: 'file_diff',
+        step: 'unexpected',
+        retryable: true
       }
     };
   }
@@ -100,7 +115,10 @@ function invalidInput(message: string): FileDiffResponse {
     ok: false,
     error: {
       code: 'INVALID_INPUT',
-      message
+      message,
+      source: 'file_diff',
+      step: 'validate_input',
+      retryable: false
     }
   };
 }
