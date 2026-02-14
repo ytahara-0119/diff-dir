@@ -85,20 +85,25 @@ function App(): JSX.Element {
       return;
     }
     setIsSubmitting(true);
-    const response = await window.diffDirApi.runCompare({
-      leftPath,
-      rightPath
-    });
-    setResult(response);
-    setStatusFilter('all');
-    setSearchQuery('');
-    setSortKey('relativePath');
-    setSortDirection('asc');
-    setSelectedItem(null);
-    setFileDiff(null);
-    setWrapDiffLine(false);
-    setShowAllContextLines(false);
-    setIsSubmitting(false);
+    try {
+      const response = await window.diffDirApi.runCompare({
+        leftPath,
+        rightPath
+      });
+      setResult(response);
+      setStatusFilter('all');
+      setSearchQuery('');
+      setSortKey('relativePath');
+      setSortDirection('asc');
+      setSelectedItem(null);
+      setFileDiff(null);
+      setWrapDiffLine(false);
+      setShowAllContextLines(false);
+    } catch (error: unknown) {
+      setResult(createCompareClientError(error));
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleSelectItem = async (item: CompareItem) => {
@@ -144,13 +149,18 @@ function App(): JSX.Element {
     }
 
     setIsLoadingDiff(true);
-    const response = await window.diffDirApi.getFileDiff({
-      leftRootPath: leftPath,
-      rightRootPath: rightPath,
-      relativePath: item.relativePath
-    });
-    setFileDiff(response);
-    setIsLoadingDiff(false);
+    try {
+      const response = await window.diffDirApi.getFileDiff({
+        leftRootPath: leftPath,
+        rightRootPath: rightPath,
+        relativePath: item.relativePath
+      });
+      setFileDiff(response);
+    } catch (error: unknown) {
+      setFileDiff(createFileDiffClientError(error));
+    } finally {
+      setIsLoadingDiff(false);
+    }
   };
 
   const retryFetchDiff = async () => {
@@ -569,4 +579,32 @@ function formatOperationError(error: {
 }): string {
   const retry = error.retryable ? 'retry available' : 'retry unlikely to help';
   return `source: ${error.source} / step: ${error.step} / code: ${error.code} / ${retry}`;
+}
+
+function createCompareClientError(error: unknown): CompareResponse {
+  const message = error instanceof Error ? error.message : 'Unknown renderer-side error.';
+  return {
+    ok: false,
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: `Renderer failed to request compare: ${message}`,
+      source: 'compare',
+      step: 'unexpected',
+      retryable: true
+    }
+  };
+}
+
+function createFileDiffClientError(error: unknown): FileDiffResponse {
+  const message = error instanceof Error ? error.message : 'Unknown renderer-side error.';
+  return {
+    ok: false,
+    error: {
+      code: 'INTERNAL_ERROR',
+      message: `Renderer failed to request file diff: ${message}`,
+      source: 'file_diff',
+      step: 'unexpected',
+      retryable: true
+    }
+  };
 }
