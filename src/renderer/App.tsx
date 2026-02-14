@@ -98,6 +98,34 @@ function App(): JSX.Element {
     }
 
     setSelectedItem(item);
+    setFileDiff(null);
+    setIsLoadingDiff(false);
+    if (item.diffKindHint === 'binary') {
+      setFileDiff({
+        ok: true,
+        data: {
+          relativePath: item.relativePath,
+          kind: 'binary',
+          lines: [],
+          maxBytes: result.data.diffPolicy.maxTextDiffBytes
+        }
+      });
+      return;
+    }
+
+    if (item.diffKindHint === 'too_large') {
+      setFileDiff({
+        ok: true,
+        data: {
+          relativePath: item.relativePath,
+          kind: 'too_large',
+          lines: [],
+          maxBytes: result.data.diffPolicy.maxTextDiffBytes
+        }
+      });
+      return;
+    }
+
     setIsLoadingDiff(true);
     const response = await window.diffDirApi.getFileDiff({
       leftRootPath: leftPath,
@@ -163,11 +191,15 @@ function App(): JSX.Element {
             / left only: {result.data.summary.leftOnly} / right only:{' '}
             {result.data.summary.rightOnly}
           </p>
+          <p className="muted">
+            text diff limit: {result.data.diffPolicy.maxTextDiffBytes} bytes
+          </p>
           <div className="result-table-wrap">
             <table className="result-table">
               <thead>
                 <tr>
                   <th>Status</th>
+                  <th>Diff Hint</th>
                   <th>Relative Path</th>
                   <th>Left Size</th>
                   <th>Right Size</th>
@@ -185,6 +217,7 @@ function App(): JSX.Element {
                     onClick={() => void handleSelectItem(item)}
                   >
                     <td>{item.status}</td>
+                    <td>{formatDiffHint(item)}</td>
                     <td>{item.relativePath}</td>
                     <td>{item.left?.size ?? '-'}</td>
                     <td>{item.right?.size ?? '-'}</td>
@@ -240,6 +273,22 @@ function App(): JSX.Element {
       ) : null}
     </main>
   );
+}
+
+function formatDiffHint(item: CompareItem): string {
+  if (item.status !== 'different') {
+    return '-';
+  }
+  if (!item.diffKindHint) {
+    return 'unknown';
+  }
+  if (item.diffKindHint === 'too_large') {
+    return 'too_large';
+  }
+  if (item.diffKindHint === 'binary') {
+    return 'binary';
+  }
+  return 'text';
 }
 
 export default App;

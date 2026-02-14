@@ -12,6 +12,11 @@ import type {
 import { DEFAULT_EXCLUDED_NAMES, walkDirectory } from './services/walk-directory';
 import { classifyEntries } from './services/classify-compare';
 import { createFileDiff } from './services/file-diff';
+import {
+  getDiffKindHint,
+  KNOWN_BINARY_EXTENSIONS,
+  MAX_TEXT_DIFF_BYTES
+} from './services/diff-policy';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -47,6 +52,20 @@ ipcMain.handle(
         walkDirectory(request.rightPath, { excludedNames: appliedExcludeNames })
       ]);
       const { items, summary } = classifyEntries(leftEntries, rightEntries);
+      const itemsWithHints = items.map((item) => {
+        if (item.status !== 'different' || !item.left || !item.right) {
+          return item;
+        }
+
+        return {
+          ...item,
+          diffKindHint: getDiffKindHint(
+            item.relativePath,
+            item.left.size,
+            item.right.size
+          )
+        };
+      });
 
       return {
         ok: true,
@@ -55,8 +74,12 @@ ipcMain.handle(
           leftFileCount: leftEntries.length,
           rightFileCount: rightEntries.length,
           appliedExcludeNames,
+          diffPolicy: {
+            maxTextDiffBytes: MAX_TEXT_DIFF_BYTES,
+            binaryExtensions: [...KNOWN_BINARY_EXTENSIONS]
+          },
           summary,
-          items,
+          items: itemsWithHints,
           requestId: crypto.randomUUID(),
           generatedAt: new Date().toISOString()
         }

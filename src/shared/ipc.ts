@@ -10,10 +10,12 @@ export interface CompareRequest {
 }
 
 export type CompareItemStatus = 'same' | 'different' | 'left_only' | 'right_only';
+export type DiffKindHint = 'text' | 'binary' | 'too_large';
 
 export interface CompareItem {
   relativePath: string;
   status: CompareItemStatus;
+  diffKindHint?: DiffKindHint;
   left?: {
     size: number;
     mtimeMs: number;
@@ -38,6 +40,10 @@ export interface CompareSuccessResponse {
     leftFileCount: number;
     rightFileCount: number;
     appliedExcludeNames: string[];
+    diffPolicy: {
+      maxTextDiffBytes: number;
+      binaryExtensions: string[];
+    };
     summary: CompareSummary;
     items: CompareItem[];
     requestId: string;

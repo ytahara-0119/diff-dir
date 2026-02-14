@@ -122,6 +122,11 @@ button[disabled] {
   margin: 0 0 0.5rem;
 }
 
+.muted {
+  margin-top: 0.2rem;
+  color: #94a3b8;
+}
+
 .result-table-wrap {
   overflow: auto;
 }
