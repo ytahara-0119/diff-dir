@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { DragEvent, FormEvent } from 'react';
 import type {
   CompareItem,
@@ -8,6 +8,9 @@ import type {
 
 type PaneSide = 'left' | 'right';
 type ElectronFile = File & { path?: string };
+type StatusFilter = 'all' | 'same' | 'different' | 'left_only' | 'right_only';
+type SortKey = 'relativePath' | 'status' | 'leftSize' | 'rightSize';
+type SortDirection = 'asc' | 'desc';
 
 function App(): JSX.Element {
   const [leftPath, setLeftPath] = useState('');
@@ -17,6 +20,10 @@ function App(): JSX.Element {
   const [selectedItem, setSelectedItem] = useState<CompareItem | null>(null);
   const [fileDiff, setFileDiff] = useState<FileDiffResponse | null>(null);
   const [isLoadingDiff, setIsLoadingDiff] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('relativePath');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const canCompare = Boolean(leftPath.trim() && rightPath.trim() && !isSubmitting);
 
@@ -80,6 +87,10 @@ function App(): JSX.Element {
       rightPath
     });
     setResult(response);
+    setStatusFilter('all');
+    setSearchQuery('');
+    setSortKey('relativePath');
+    setSortDirection('asc');
     setSelectedItem(null);
     setFileDiff(null);
     setIsSubmitting(false);
@@ -135,6 +146,28 @@ function App(): JSX.Element {
     setFileDiff(response);
     setIsLoadingDiff(false);
   };
+
+  const visibleItems = useMemo(() => {
+    if (!result?.ok) {
+      return [];
+    }
+
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const filtered = result.data.items.filter((item) => {
+      if (statusFilter !== 'all' && item.status !== statusFilter) {
+        return false;
+      }
+      if (
+        normalizedQuery &&
+        !item.relativePath.toLowerCase().includes(normalizedQuery)
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => compareItems(a, b, sortKey, sortDirection));
+  }, [result, searchQuery, sortDirection, sortKey, statusFilter]);
 
   return (
     <main className="app">
@@ -194,6 +227,57 @@ function App(): JSX.Element {
           <p className="muted">
             text diff limit: {result.data.diffPolicy.maxTextDiffBytes} bytes
           </p>
+          <div className="result-controls">
+            <label>
+              Status
+              <select
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+              >
+                <option value="all">all</option>
+                <option value="different">different</option>
+                <option value="same">same</option>
+                <option value="left_only">left_only</option>
+                <option value="right_only">right_only</option>
+              </select>
+            </label>
+            <label>
+              Search
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="filename or path"
+              />
+            </label>
+            <label>
+              Sort
+              <select
+                value={sortKey}
+                onChange={(event) => setSortKey(event.target.value as SortKey)}
+              >
+                <option value="relativePath">path</option>
+                <option value="status">status</option>
+                <option value="leftSize">left size</option>
+                <option value="rightSize">right size</option>
+              </select>
+            </label>
+            <label>
+              Direction
+              <select
+                value={sortDirection}
+                onChange={(event) =>
+                  setSortDirection(event.target.value as SortDirection)
+                }
+              >
+                <option value="asc">asc</option>
+                <option value="desc">desc</option>
+              </select>
+            </label>
+          </div>
+          <p className="muted">
+            showing {visibleItems.length} / {result.data.items.length}
+          </p>
           <div className="result-table-wrap">
             <table className="result-table">
               <thead>
@@ -206,14 +290,10 @@ function App(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {result.data.items.map((item) => (
+                {visibleItems.map((item) => (
                   <tr
                     key={item.relativePath}
-                    className={
-                      item.status === 'different' && item.left && item.right
-                        ? 'row-clickable'
-                        : ''
-                    }
+                    className={buildRowClassName(item, selectedItem)}
                     onClick={() => void handleSelectItem(item)}
                   >
                     <td>{item.status}</td>
@@ -289,6 +369,55 @@ function formatDiffHint(item: CompareItem): string {
     return 'binary';
   }
   return 'text';
+}
+
+function buildRowClassName(
+  item: CompareItem,
+  selectedItem: CompareItem | null
+): string {
+  const isClickable = item.status === 'different' && item.left && item.right;
+  const isSelected = selectedItem?.relativePath === item.relativePath;
+  if (isClickable && isSelected) {
+    return 'row-clickable row-selected';
+  }
+  if (isClickable) {
+    return 'row-clickable';
+  }
+  if (isSelected) {
+    return 'row-selected';
+  }
+  return '';
+}
+
+function compareItems(
+  left: CompareItem,
+  right: CompareItem,
+  sortKey: SortKey,
+  sortDirection: SortDirection
+): number {
+  const multiplier = sortDirection === 'asc' ? 1 : -1;
+  const leftValue = readSortValue(left, sortKey);
+  const rightValue = readSortValue(right, sortKey);
+  if (leftValue < rightValue) {
+    return -1 * multiplier;
+  }
+  if (leftValue > rightValue) {
+    return 1 * multiplier;
+  }
+  return left.relativePath.localeCompare(right.relativePath) * multiplier;
+}
+
+function readSortValue(item: CompareItem, sortKey: SortKey): number | string {
+  if (sortKey === 'relativePath') {
+    return item.relativePath;
+  }
+  if (sortKey === 'status') {
+    return item.status;
+  }
+  if (sortKey === 'leftSize') {
+    return item.left?.size ?? -1;
+  }
+  return item.right?.size ?? -1;
 }
 
 export default App;

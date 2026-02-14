@@ -127,6 +127,30 @@ button[disabled] {
   color: #94a3b8;
 }
 
+.result-controls {
+  margin-top: 0.65rem;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.result-controls label {
+  font-weight: 500;
+  font-size: 0.84rem;
+  color: #cbd5e1;
+}
+
+.result-controls input,
+.result-controls select {
+  width: 100%;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  background: #0b1220;
+  color: #e2e8f0;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+}
+
 .result-table-wrap {
   overflow: auto;
 }
@@ -153,6 +177,10 @@ button[disabled] {
   background: #1e293b;
 }
 
+.row-selected {
+  background: #334155;
+}
+
 .result code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   color: #e2e8f0;
@@ -161,5 +189,9 @@ button[disabled] {
 @media (max-width: 720px) {
   .drop-grid {
     grid-template-columns: 1fr;
+  }
+
+  .result-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
