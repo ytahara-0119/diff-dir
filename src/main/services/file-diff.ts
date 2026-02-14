@@ -6,27 +6,13 @@ import type {
   FileDiffRequest,
   FileDiffResponse
 } from '../../shared/ipc';
+import { isBinaryPath, MAX_TEXT_DIFF_BYTES } from './diff-policy';
 
-const MAX_TEXT_DIFF_BYTES = 1024 * 1024;
-const KNOWN_BINARY_EXTENSIONS = new Set([
-  '.png',
-  '.jpg',
-  '.jpeg',
-  '.gif',
-  '.webp',
-  '.bmp',
-  '.ico',
-  '.pdf',
-  '.zip',
-  '.gz',
-  '.mp3',
-  '.mp4',
-  '.mov',
-  '.exe',
-  '.dll',
-  '.so',
-  '.dylib'
-]);
+const FILE_DIFF_ERROR_MESSAGE = {
+  INVALID_INPUT: 'The selected file path is invalid or inaccessible.',
+  NOT_FOUND: 'The selected file was not found on one or both sides.',
+  INTERNAL_ERROR: 'Unexpected error while creating file diff.'
+} as const;
 
 export async function createFileDiff(
   request: FileDiffRequest
@@ -90,20 +76,20 @@ export async function createFileDiff(
         ok: false,
         error: {
           code: 'NOT_FOUND',
-          message: 'Compared file was not found on one or both sides.'
+          message: FILE_DIFF_ERROR_MESSAGE.NOT_FOUND
         }
       };
     }
 
     if (code === 'EACCES' || code === 'EPERM' || code === 'ENOTDIR') {
-      return invalidInput('Compared file path is invalid or inaccessible.');
+      return invalidInput(FILE_DIFF_ERROR_MESSAGE.INVALID_INPUT);
     }
 
     return {
       ok: false,
       error: {
         code: 'INTERNAL_ERROR',
-        message: 'Unexpected error while creating file diff.'
+        message: FILE_DIFF_ERROR_MESSAGE.INTERNAL_ERROR
       }
     };
   }
@@ -120,8 +106,7 @@ function invalidInput(message: string): FileDiffResponse {
 }
 
 function isBinaryFile(filePath: string, content: Buffer): boolean {
-  const extension = path.extname(filePath).toLowerCase();
-  if (KNOWN_BINARY_EXTENSIONS.has(extension)) {
+  if (isBinaryPath(filePath)) {
     return true;
   }
 
