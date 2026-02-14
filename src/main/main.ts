@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { stat } from 'node:fs/promises';
@@ -24,7 +25,10 @@ const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 ipcMain.handle(
   IPC_CHANNELS.runCompare,
   async (_event, request: CompareRequest): Promise<CompareResponse> => {
-    if (!request.leftPath || !request.rightPath) {
+    const leftPath = normalizeInputPath(request.leftPath);
+    const rightPath = normalizeInputPath(request.rightPath);
+
+    if (!leftPath || !rightPath) {
       return compareError(
         'INVALID_INPUT',
         'Both leftPath and rightPath are required.',
@@ -34,8 +38,8 @@ ipcMain.handle(
     }
 
     try {
-      const leftStats = await stat(request.leftPath);
-      const rightStats = await stat(request.rightPath);
+      const leftStats = await stat(leftPath);
+      const rightStats = await stat(rightPath);
       if (!leftStats.isDirectory() || !rightStats.isDirectory()) {
         return compareError(
           'INVALID_INPUT',
@@ -53,8 +57,8 @@ ipcMain.handle(
     let rightEntries: DirectoryEntry[];
     try {
       [leftEntries, rightEntries] = await Promise.all([
-        walkDirectory(request.leftPath, { excludedNames: appliedExcludeNames }),
-        walkDirectory(request.rightPath, { excludedNames: appliedExcludeNames })
+        walkDirectory(leftPath, { excludedNames: appliedExcludeNames }),
+        walkDirectory(rightPath, { excludedNames: appliedExcludeNames })
       ]);
     } catch (error: unknown) {
       return mapCompareFsError(error, 'scan_directory');
@@ -113,6 +117,16 @@ ipcMain.handle(
     createFileDiff(request)
 );
 
+ipcMain.handle(IPC_CHANNELS.selectDirectory, async (): Promise<string | null> => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory']
+  });
+  if (result.canceled) {
+    return null;
+  }
+  return result.filePaths[0] ?? null;
+});
+
 function buildExcludeNameList(customExcludeNames: string[] = []): string[] {
   return Array.from(
     new Set([...DEFAULT_EXCLUDED_NAMES, ...customExcludeNames.map((name) => name.trim())])
@@ -166,6 +180,21 @@ function mapCompareFsError(
   );
 }
 
+function normalizeInputPath(rawPath: string): string {
+  const trimmed = rawPath.trim().replace(/^['"]|['"]$/g, '');
+  if (!trimmed) {
+    return '';
+  }
+
+  if (trimmed === '~') {
+    return os.homedir();
+  }
+  if (trimmed.startsWith('~/')) {
+    return path.join(os.homedir(), trimmed.slice(2));
+  }
+  return trimmed;
+}
+
 function createWindow(): void {
   const win = new BrowserWindow({
     width: 1200,
@@ -173,7 +202,8 @@ function createWindow(): void {
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: false
     }
   });
 

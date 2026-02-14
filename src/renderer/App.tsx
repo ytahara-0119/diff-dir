@@ -79,6 +79,14 @@ function App(): JSX.Element {
 
   const handleDragLeave = () => setActiveDrop(null);
 
+  const handlePickDirectory = async (side: PaneSide) => {
+    const selectedPath = await window.diffDirApi.selectDirectory();
+    if (!selectedPath) {
+      return;
+    }
+    updatePath(side, selectedPath);
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canCompare) {
@@ -242,6 +250,13 @@ function App(): JSX.Element {
         </div>
         <label>
           Left Path (manual)
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => void handlePickDirectory('left')}
+          >
+            Select Left Folder
+          </button>
           <input
             type="text"
             value={leftPath}
@@ -251,6 +266,13 @@ function App(): JSX.Element {
         </label>
         <label>
           Right Path (manual)
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={() => void handlePickDirectory('right')}
+          >
+            Select Right Folder
+          </button>
           <input
             type="text"
             value={rightPath}
