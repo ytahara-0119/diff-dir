@@ -16,7 +16,9 @@
     "test:e2e": "npm run build && playwright test -c playwright.config.ts",
     "test:e2e:run": "npm run build && cross-env RUN_E2E=1 playwright test -c playwright.config.ts",
     "lint": "eslint . --ext .ts,.tsx",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --publish never",
+    "pack:mac": "npm run build && electron-builder --mac --dir --publish never"
   },
   "dependencies": {
     "diff": "^8.0.3",
@@ -34,6 +36,7 @@
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^40.4.1",
+    "electron-builder": "^26.7.0",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react-hooks": "^5.1.0",
@@ -42,5 +45,32 @@
     "vite": "^6.0.5",
     "vitest": "^4.0.18",
     "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.ytahara.diffdir",
+    "productName": "DiffDir",
+    "directories": {
+      "buildResources": "build-resources",
+      "output": "dist-release"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "asar": true,
+    "files": [
+      "dist/main/**/*",
+      "dist/renderer/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build-resources/icon.icns",
+      "identity": null,
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
   }
 }
