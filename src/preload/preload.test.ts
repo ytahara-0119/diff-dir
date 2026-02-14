@@ -36,6 +36,7 @@ describe('preload bridge', () => {
         relativePath: string;
       }) => Promise<unknown>;
       selectDirectory: () => Promise<string | null>;
+      resolveDirectoryPath: (rawPath: string) => Promise<string | null>;
     };
 
     await api.runCompare({ leftPath: '/tmp/left', rightPath: '/tmp/right' });
@@ -45,7 +46,8 @@ describe('preload bridge', () => {
       relativePath: 'a.txt'
     });
     await api.selectDirectory();
+    await api.resolveDirectoryPath('/tmp/file.txt');
 
-    expect(invoke).toHaveBeenCalledTimes(3);
+    expect(invoke).toHaveBeenCalledTimes(4);
   });
 });

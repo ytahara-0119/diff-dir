@@ -39,23 +39,23 @@ function App(): JSX.Element {
   const extractDirectoryPath = (
     event: DragEvent<HTMLDivElement>
   ): string | null => {
-    const firstItem = event.dataTransfer.items?.[0] as
-      | (DataTransferItem & {
-          webkitGetAsEntry?: () => { isDirectory?: boolean } | null;
-        })
-      | undefined;
-    const firstFile = event.dataTransfer.files?.[0] as ElectronFile | undefined;
-
-    if (!firstFile?.path) {
-      return null;
+    const filePaths = Array.from(event.dataTransfer.files)
+      .map((file) => (file as ElectronFile).path)
+      .filter((value): value is string => Boolean(value));
+    if (filePaths.length > 0) {
+      return inferDropRootPath(filePaths);
     }
 
-    const entry = firstItem?.webkitGetAsEntry?.();
-    if (entry && entry.isDirectory === false) {
-      return null;
+    const uriList = event.dataTransfer.getData('text/uri-list');
+    if (uriList) {
+      const uriPath = firstPathFromUriList(uriList);
+      if (uriPath) {
+        return uriPath;
+      }
     }
 
-    return firstFile.path;
+    const plainText = event.dataTransfer.getData('text/plain').trim();
+    return plainText || null;
   };
 
   const updatePath = (side: PaneSide, path: string) => {
@@ -67,14 +67,20 @@ function App(): JSX.Element {
     setRightPath(path);
   };
 
-  const handleDrop = (side: PaneSide) => (event: DragEvent<HTMLDivElement>) => {
+  const handleDrop = (side: PaneSide) => async (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setActiveDrop(null);
-    const droppedPath = extractDirectoryPath(event);
-    if (!droppedPath) {
+    const rawPath = extractDirectoryPath(event);
+    if (!rawPath) {
       return;
     }
-    updatePath(side, droppedPath);
+
+    const resolvedPath = await window.diffDirApi.resolveDirectoryPath(rawPath);
+    if (!resolvedPath) {
+      return;
+    }
+
+    updatePath(side, resolvedPath);
   };
 
   const handleDragOver =
@@ -716,4 +722,54 @@ function createFileDiffClientError(error: unknown): FileDiffResponse {
       retryable: true
     }
   };
+}
+
+function inferDropRootPath(paths: string[]): string {
+  if (paths.length === 1) {
+    return paths[0];
+  }
+
+  const normalizedParts = paths.map((value) =>
+    value
+      .replace(/\\/g, '/')
+      .replace(/\/+$/g, '')
+      .split('/')
+  );
+  const minimumLength = Math.min(...normalizedParts.map((parts) => parts.length));
+  const commonParts: string[] = [];
+
+  for (let index = 0; index < minimumLength; index += 1) {
+    const candidate = normalizedParts[0][index];
+    if (normalizedParts.every((parts) => parts[index] === candidate)) {
+      commonParts.push(candidate);
+      continue;
+    }
+    break;
+  }
+
+  if (commonParts.length === 0) {
+    return paths[0];
+  }
+
+  if (commonParts.length === 1 && commonParts[0] === '') {
+    return '/';
+  }
+  return commonParts.join('/');
+}
+
+function firstPathFromUriList(value: string): string | null {
+  const line = value
+    .split('\n')
+    .map((item) => item.trim())
+    .find((item) => item && !item.startsWith('#'));
+  if (!line || !line.startsWith('file://')) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(line);
+    return decodeURIComponent(parsed.pathname);
+  } catch {
+    return null;
+  }
 }

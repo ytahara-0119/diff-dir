@@ -127,6 +127,29 @@ ipcMain.handle(IPC_CHANNELS.selectDirectory, async (): Promise<string | null> =>
   return result.filePaths[0] ?? null;
 });
 
+ipcMain.handle(
+  IPC_CHANNELS.resolveDirectoryPath,
+  async (_event, rawPath: string): Promise<string | null> => {
+    const normalized = normalizeInputPath(rawPath);
+    if (!normalized) {
+      return null;
+    }
+
+    try {
+      const stats = await stat(normalized);
+      if (stats.isDirectory()) {
+        return normalized;
+      }
+      if (stats.isFile()) {
+        return path.dirname(normalized);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+);
+
 function buildExcludeNameList(customExcludeNames: string[] = []): string[] {
   return Array.from(
     new Set([...DEFAULT_EXCLUDED_NAMES, ...customExcludeNames.map((name) => name.trim())])
