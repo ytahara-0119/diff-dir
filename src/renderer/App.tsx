@@ -123,9 +123,39 @@ function App(): JSX.Element {
           {isSubmitting ? 'Comparing...' : 'Start Compare'}
         </button>
       </form>
-      {result ? (
-        <pre className="result">{JSON.stringify(result, null, 2)}</pre>
+      {result?.ok ? (
+        <section className="result">
+          <h3>Summary</h3>
+          <p>
+            same: {result.data.summary.same} / different: {result.data.summary.different}{' '}
+            / left only: {result.data.summary.leftOnly} / right only:{' '}
+            {result.data.summary.rightOnly}
+          </p>
+          <div className="result-table-wrap">
+            <table className="result-table">
+              <thead>
+                <tr>
+                  <th>Status</th>
+                  <th>Relative Path</th>
+                  <th>Left Size</th>
+                  <th>Right Size</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.data.items.map((item) => (
+                  <tr key={item.relativePath}>
+                    <td>{item.status}</td>
+                    <td>{item.relativePath}</td>
+                    <td>{item.left?.size ?? '-'}</td>
+                    <td>{item.right?.size ?? '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ) : null}
+      {result && !result.ok ? <pre className="result">{result.error.message}</pre> : null}
     </main>
   );
 }

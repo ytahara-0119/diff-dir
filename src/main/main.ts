@@ -5,6 +5,7 @@ import { stat } from 'node:fs/promises';
 import { IPC_CHANNELS } from '../shared/ipc';
 import type { CompareRequest, CompareResponse } from '../shared/ipc';
 import { DEFAULT_EXCLUDED_NAMES, walkDirectory } from './services/walk-directory';
+import { classifyEntries } from './services/classify-compare';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -39,6 +40,7 @@ ipcMain.handle(
         walkDirectory(request.leftPath, { excludedNames: appliedExcludeNames }),
         walkDirectory(request.rightPath, { excludedNames: appliedExcludeNames })
       ]);
+      const { items, summary } = classifyEntries(leftEntries, rightEntries);
 
       return {
         ok: true,
@@ -46,11 +48,9 @@ ipcMain.handle(
           request,
           leftFileCount: leftEntries.length,
           rightFileCount: rightEntries.length,
-          leftSamplePaths: leftEntries.slice(0, 10).map((entry) => entry.relativePath),
-          rightSamplePaths: rightEntries
-            .slice(0, 10)
-            .map((entry) => entry.relativePath),
           appliedExcludeNames,
+          summary,
+          items,
           requestId: crypto.randomUUID(),
           generatedAt: new Date().toISOString()
         }
