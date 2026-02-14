@@ -49,12 +49,25 @@ function App(): JSX.Element {
     };
   }, []);
 
-  const extractDirectoryPath = (
+  const extractDirectoryPath = async (
     event: DragEvent<HTMLElement>
-  ): string | null => {
-    const filePaths = Array.from(event.dataTransfer.files)
+  ): Promise<string | null> => {
+    const files = Array.from(event.dataTransfer.files);
+    const resolvedFromBridge = await Promise.all(
+      files.map(async (file) => {
+        try {
+          return window.diffDirApi.getDroppedFilePath(file);
+        } catch {
+          return null;
+        }
+      })
+    );
+    const legacyFilePaths = files
       .map((file) => (file as ElectronFile).path)
       .filter((value): value is string => Boolean(value));
+    const filePaths = [...resolvedFromBridge, ...legacyFilePaths].filter(
+      (value): value is string => Boolean(value)
+    );
     if (filePaths.length > 0) {
       return inferDropRootPath(filePaths);
     }
@@ -88,7 +101,7 @@ function App(): JSX.Element {
     event.preventDefault();
     event.stopPropagation();
     setActiveDrop(null);
-    const rawPath = extractDirectoryPath(event);
+    const rawPath = await extractDirectoryPath(event);
     if (!rawPath) {
       return;
     }

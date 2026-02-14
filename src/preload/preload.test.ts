@@ -2,16 +2,19 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 
 const exposeInMainWorld = vi.fn();
 const invoke = vi.fn();
+const getPathForFile = vi.fn();
 
 vi.mock('electron', () => ({
   contextBridge: { exposeInMainWorld },
-  ipcRenderer: { invoke }
+  ipcRenderer: { invoke },
+  webUtils: { getPathForFile }
 }));
 
 describe('preload bridge', () => {
   beforeEach(() => {
     exposeInMainWorld.mockClear();
     invoke.mockClear();
+    getPathForFile.mockClear();
     vi.resetModules();
   });
 
@@ -37,6 +40,7 @@ describe('preload bridge', () => {
       }) => Promise<unknown>;
       selectDirectory: () => Promise<string | null>;
       resolveDirectoryPath: (rawPath: string) => Promise<string | null>;
+      getDroppedFilePath: (file: File) => string | null;
     };
 
     await api.runCompare({ leftPath: '/tmp/left', rightPath: '/tmp/right' });
@@ -47,7 +51,9 @@ describe('preload bridge', () => {
     });
     await api.selectDirectory();
     await api.resolveDirectoryPath('/tmp/file.txt');
+    api.getDroppedFilePath({} as File);
 
     expect(invoke).toHaveBeenCalledTimes(4);
+    expect(getPathForFile).toHaveBeenCalledTimes(1);
   });
 });

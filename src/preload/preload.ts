@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { IPC_CHANNELS } from '../shared/ipc';
 import type {
   CompareRequest,
@@ -20,5 +20,13 @@ contextBridge.exposeInMainWorld('diffDirApi', {
   selectDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(IPC_CHANNELS.selectDirectory),
   resolveDirectoryPath: (rawPath: string): Promise<string | null> =>
-    ipcRenderer.invoke(IPC_CHANNELS.resolveDirectoryPath, rawPath)
+    ipcRenderer.invoke(IPC_CHANNELS.resolveDirectoryPath, rawPath),
+  getDroppedFilePath: (file: File): string | null => {
+    try {
+      const resolved = webUtils.getPathForFile(file);
+      return resolved || null;
+    } catch {
+      return null;
+    }
+  }
 });
