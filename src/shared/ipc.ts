@@ -11,7 +11,10 @@ export interface CompareSuccessResponse {
   ok: true;
   data: {
     request: CompareRequest;
-    message: string;
+    leftFileCount: number;
+    rightFileCount: number;
+    leftSamplePaths: string[];
+    rightSamplePaths: string[];
     requestId: string;
     generatedAt: string;
   };
