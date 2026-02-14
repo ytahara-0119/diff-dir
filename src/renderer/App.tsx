@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DragEvent, FormEvent } from 'react';
 import type {
   CompareItem,
@@ -36,8 +36,21 @@ function App(): JSX.Element {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const canCompare = Boolean(leftPath.trim() && rightPath.trim() && !isSubmitting);
 
+  useEffect(() => {
+    const preventWindowDrop = (event: Event) => {
+      event.preventDefault();
+    };
+
+    window.addEventListener('dragover', preventWindowDrop);
+    window.addEventListener('drop', preventWindowDrop);
+    return () => {
+      window.removeEventListener('dragover', preventWindowDrop);
+      window.removeEventListener('drop', preventWindowDrop);
+    };
+  }, []);
+
   const extractDirectoryPath = (
-    event: DragEvent<HTMLDivElement>
+    event: DragEvent<HTMLElement>
   ): string | null => {
     const filePaths = Array.from(event.dataTransfer.files)
       .map((file) => (file as ElectronFile).path)
@@ -67,8 +80,9 @@ function App(): JSX.Element {
     setRightPath(path);
   };
 
-  const handleDrop = (side: PaneSide) => async (event: DragEvent<HTMLDivElement>) => {
+  const handleDrop = (side: PaneSide) => async (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
+    event.stopPropagation();
     setActiveDrop(null);
     const rawPath = extractDirectoryPath(event);
     if (!rawPath) {
@@ -277,6 +291,8 @@ function App(): JSX.Element {
             type="text"
             value={leftPath}
             onChange={(event) => setLeftPath(event.target.value)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={handleDrop('left')}
             placeholder="/Users/you/left-folder"
           />
         </label>
@@ -293,6 +309,8 @@ function App(): JSX.Element {
             type="text"
             value={rightPath}
             onChange={(event) => setRightPath(event.target.value)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={handleDrop('right')}
             placeholder="/Users/you/right-folder"
           />
         </label>
