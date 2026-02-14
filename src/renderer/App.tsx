@@ -68,7 +68,11 @@ function App(): JSX.Element {
     }
 
     const plainText = event.dataTransfer.getData('text/plain').trim();
-    return plainText || null;
+    if (plainText) {
+      const parsed = parseDroppedTextPath(plainText);
+      return parsed ?? plainText;
+    }
+    return null;
   };
 
   const updatePath = (side: PaneSide, path: string) => {
@@ -89,12 +93,26 @@ function App(): JSX.Element {
       return;
     }
 
-    const resolvedPath = await window.diffDirApi.resolveDirectoryPath(rawPath);
-    if (!resolvedPath) {
-      return;
+    const immediatePath = normalizeDroppedRawPath(rawPath);
+    if (immediatePath) {
+      updatePath(side, immediatePath);
+    } else {
+      updatePath(side, rawPath);
     }
 
-    updatePath(side, resolvedPath);
+    try {
+      if (!window.diffDirApi?.resolveDirectoryPath) {
+        return;
+      }
+      const resolvedPath = await window.diffDirApi.resolveDirectoryPath(
+        immediatePath ?? rawPath
+      );
+      if (resolvedPath) {
+        updatePath(side, resolvedPath);
+      }
+    } catch {
+      // Keep the immediate path shown in the input when normalization fails.
+    }
   };
 
   const handleDragOver =
@@ -790,4 +808,30 @@ function firstPathFromUriList(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+function parseDroppedTextPath(value: string): string | null {
+  const firstLine = value
+    .split('\n')
+    .map((item) => item.trim())
+    .find((item) => item.length > 0);
+  if (!firstLine) {
+    return null;
+  }
+
+  if (firstLine.startsWith('file://')) {
+    return firstPathFromUriList(firstLine);
+  }
+  return firstLine;
+}
+
+function normalizeDroppedRawPath(rawPath: string): string | null {
+  const trimmed = rawPath.trim().replace(/^['"]|['"]$/g, '');
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.startsWith('file://')) {
+    return firstPathFromUriList(trimmed);
+  }
+  return trimmed;
 }
