@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { IPC_CHANNELS } from '../shared/ipc';
 import type { CompareRequest, CompareResponse } from '../shared/ipc';
-import { walkDirectory } from './services/walk-directory';
+import { DEFAULT_EXCLUDED_NAMES, walkDirectory } from './services/walk-directory';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -34,9 +34,10 @@ ipcMain.handle(
         };
       }
 
+      const appliedExcludeNames = buildExcludeNameList(request.excludeNames);
       const [leftEntries, rightEntries] = await Promise.all([
-        walkDirectory(request.leftPath),
-        walkDirectory(request.rightPath)
+        walkDirectory(request.leftPath, { excludedNames: appliedExcludeNames }),
+        walkDirectory(request.rightPath, { excludedNames: appliedExcludeNames })
       ]);
 
       return {
@@ -49,6 +50,7 @@ ipcMain.handle(
           rightSamplePaths: rightEntries
             .slice(0, 10)
             .map((entry) => entry.relativePath),
+          appliedExcludeNames,
           requestId: crypto.randomUUID(),
           generatedAt: new Date().toISOString()
         }
@@ -87,6 +89,12 @@ function isInvalidInputError(error: unknown): boolean {
     maybeCode === 'EACCES' ||
     maybeCode === 'EPERM'
   );
+}
+
+function buildExcludeNameList(customExcludeNames: string[] = []): string[] {
+  return Array.from(
+    new Set([...DEFAULT_EXCLUDED_NAMES, ...customExcludeNames.map((name) => name.trim())])
+  ).filter((name) => name.length > 0);
 }
 
 function createWindow(): void {

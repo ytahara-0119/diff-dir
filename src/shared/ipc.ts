@@ -5,6 +5,7 @@ export const IPC_CHANNELS = {
 export interface CompareRequest {
   leftPath: string;
   rightPath: string;
+  excludeNames?: string[];
 }
 
 export interface CompareSuccessResponse {
@@ -15,6 +16,7 @@ export interface CompareSuccessResponse {
     rightFileCount: number;
     leftSamplePaths: string[];
     rightSamplePaths: string[];
+    appliedExcludeNames: string[];
     requestId: string;
     generatedAt: string;
   };
