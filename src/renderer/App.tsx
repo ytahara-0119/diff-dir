@@ -86,6 +86,14 @@ function App(): JSX.Element {
     }
     setIsSubmitting(true);
     try {
+      if (!window.diffDirApi?.runCompare) {
+        setResult(
+          createCompareClientError(
+            new Error('Preload bridge is unavailable. Please restart the app.')
+          )
+        );
+        return;
+      }
       const response = await window.diffDirApi.runCompare({
         leftPath,
         rightPath
@@ -150,6 +158,14 @@ function App(): JSX.Element {
 
     setIsLoadingDiff(true);
     try {
+      if (!window.diffDirApi?.getFileDiff) {
+        setFileDiff(
+          createFileDiffClientError(
+            new Error('Preload bridge is unavailable. Please restart the app.')
+          )
+        );
+        return;
+      }
       const response = await window.diffDirApi.getFileDiff({
         leftRootPath: leftPath,
         rightRootPath: rightPath,
