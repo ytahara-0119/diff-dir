@@ -1,8 +1,10 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { stat } from 'node:fs/promises';
 import { IPC_CHANNELS } from '../shared/ipc';
 import type { CompareRequest, CompareResponse } from '../shared/ipc';
+import { walkDirectory } from './services/walk-directory';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -20,16 +22,48 @@ ipcMain.handle(
         };
       }
 
+      const leftStats = await stat(request.leftPath);
+      const rightStats = await stat(request.rightPath);
+      if (!leftStats.isDirectory() || !rightStats.isDirectory()) {
+        return {
+          ok: false,
+          error: {
+            code: 'INVALID_INPUT',
+            message: 'Both paths must point to directories.'
+          }
+        };
+      }
+
+      const [leftEntries, rightEntries] = await Promise.all([
+        walkDirectory(request.leftPath),
+        walkDirectory(request.rightPath)
+      ]);
+
       return {
         ok: true,
         data: {
           request,
-          message: 'IPC request received. Compare engine will be added later.',
+          leftFileCount: leftEntries.length,
+          rightFileCount: rightEntries.length,
+          leftSamplePaths: leftEntries.slice(0, 10).map((entry) => entry.relativePath),
+          rightSamplePaths: rightEntries
+            .slice(0, 10)
+            .map((entry) => entry.relativePath),
           requestId: crypto.randomUUID(),
           generatedAt: new Date().toISOString()
         }
       };
-    } catch {
+    } catch (error: unknown) {
+      if (isInvalidInputError(error)) {
+        return {
+          ok: false,
+          error: {
+            code: 'INVALID_INPUT',
+            message: 'Directory path is invalid or inaccessible.'
+          }
+        };
+      }
+
       return {
         ok: false,
         error: {
@@ -40,6 +74,20 @@ ipcMain.handle(
     }
   }
 );
+
+function isInvalidInputError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const maybeCode = (error as NodeJS.ErrnoException).code;
+  return (
+    maybeCode === 'ENOENT' ||
+    maybeCode === 'ENOTDIR' ||
+    maybeCode === 'EACCES' ||
+    maybeCode === 'EPERM'
+  );
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
