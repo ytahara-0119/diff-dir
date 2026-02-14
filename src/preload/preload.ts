@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import { IPC_CHANNELS } from '../shared/ipc';
-import type { CompareRequest, CompareResponse } from '../shared/ipc';
+import type {
+  CompareRequest,
+  CompareResponse,
+  FileDiffRequest,
+  FileDiffResponse
+} from '../shared/ipc';
 
 contextBridge.exposeInMainWorld('appInfo', {
   name: 'diff-dir',
@@ -9,5 +14,7 @@ contextBridge.exposeInMainWorld('appInfo', {
 
 contextBridge.exposeInMainWorld('diffDirApi', {
   runCompare: (request: CompareRequest): Promise<CompareResponse> =>
-    ipcRenderer.invoke(IPC_CHANNELS.runCompare, request)
+    ipcRenderer.invoke(IPC_CHANNELS.runCompare, request),
+  getFileDiff: (request: FileDiffRequest): Promise<FileDiffResponse> =>
+    ipcRenderer.invoke(IPC_CHANNELS.getFileDiff, request)
 });

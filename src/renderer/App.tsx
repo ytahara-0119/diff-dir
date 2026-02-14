@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import type { DragEvent, FormEvent } from 'react';
-import type { CompareResponse } from '../shared/ipc';
+import type {
+  CompareItem,
+  CompareResponse,
+  FileDiffResponse
+} from '../shared/ipc';
 
 type PaneSide = 'left' | 'right';
 type ElectronFile = File & { path?: string };
@@ -10,6 +14,9 @@ function App(): JSX.Element {
   const [rightPath, setRightPath] = useState('');
   const [activeDrop, setActiveDrop] = useState<PaneSide | null>(null);
   const [result, setResult] = useState<CompareResponse | null>(null);
+  const [selectedItem, setSelectedItem] = useState<CompareItem | null>(null);
+  const [fileDiff, setFileDiff] = useState<FileDiffResponse | null>(null);
+  const [isLoadingDiff, setIsLoadingDiff] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const canCompare = Boolean(leftPath.trim() && rightPath.trim() && !isSubmitting);
 
@@ -73,7 +80,32 @@ function App(): JSX.Element {
       rightPath
     });
     setResult(response);
+    setSelectedItem(null);
+    setFileDiff(null);
     setIsSubmitting(false);
+  };
+
+  const handleSelectItem = async (item: CompareItem) => {
+    if (
+      item.status !== 'different' ||
+      !item.left ||
+      !item.right ||
+      !result?.ok ||
+      !leftPath.trim() ||
+      !rightPath.trim()
+    ) {
+      return;
+    }
+
+    setSelectedItem(item);
+    setIsLoadingDiff(true);
+    const response = await window.diffDirApi.getFileDiff({
+      leftRootPath: leftPath,
+      rightRootPath: rightPath,
+      relativePath: item.relativePath
+    });
+    setFileDiff(response);
+    setIsLoadingDiff(false);
   };
 
   return (
@@ -143,7 +175,15 @@ function App(): JSX.Element {
               </thead>
               <tbody>
                 {result.data.items.map((item) => (
-                  <tr key={item.relativePath}>
+                  <tr
+                    key={item.relativePath}
+                    className={
+                      item.status === 'different' && item.left && item.right
+                        ? 'row-clickable'
+                        : ''
+                    }
+                    onClick={() => void handleSelectItem(item)}
+                  >
                     <td>{item.status}</td>
                     <td>{item.relativePath}</td>
                     <td>{item.left?.size ?? '-'}</td>
@@ -156,6 +196,48 @@ function App(): JSX.Element {
         </section>
       ) : null}
       {result && !result.ok ? <pre className="result">{result.error.message}</pre> : null}
+      {selectedItem ? (
+        <section className="result">
+          <h3>File Diff: {selectedItem.relativePath}</h3>
+          {isLoadingDiff ? <p>Loading diff...</p> : null}
+          {!isLoadingDiff && fileDiff?.ok && fileDiff.data.kind === 'text' ? (
+            <div className="result-table-wrap">
+              <table className="result-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Left #</th>
+                    <th>Right #</th>
+                    <th>Line</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fileDiff.data.lines.map((line, index) => (
+                    <tr key={`${line.type}-${index}`}>
+                      <td>{line.type}</td>
+                      <td>{line.leftLineNumber ?? '-'}</td>
+                      <td>{line.rightLineNumber ?? '-'}</td>
+                      <td>
+                        <code>{line.text || ' '}</code>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+          {!isLoadingDiff && fileDiff?.ok && fileDiff.data.kind === 'binary' ? (
+            <p>Binary file diff is not supported in MVP.</p>
+          ) : null}
+          {!isLoadingDiff && fileDiff?.ok && fileDiff.data.kind === 'too_large' ? (
+            <p>
+              File is too large for text diff in MVP (limit: {fileDiff.data.maxBytes}{' '}
+              bytes).
+            </p>
+          ) : null}
+          {!isLoadingDiff && fileDiff && !fileDiff.ok ? <p>{fileDiff.error.message}</p> : null}
+        </section>
+      ) : null}
     </main>
   );
 }

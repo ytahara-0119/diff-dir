@@ -3,9 +3,15 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { stat } from 'node:fs/promises';
 import { IPC_CHANNELS } from '../shared/ipc';
-import type { CompareRequest, CompareResponse } from '../shared/ipc';
+import type {
+  CompareRequest,
+  CompareResponse,
+  FileDiffRequest,
+  FileDiffResponse
+} from '../shared/ipc';
 import { DEFAULT_EXCLUDED_NAMES, walkDirectory } from './services/walk-directory';
 import { classifyEntries } from './services/classify-compare';
+import { createFileDiff } from './services/file-diff';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 
@@ -75,6 +81,12 @@ ipcMain.handle(
       };
     }
   }
+);
+
+ipcMain.handle(
+  IPC_CHANNELS.getFileDiff,
+  async (_event, request: FileDiffRequest): Promise<FileDiffResponse> =>
+    createFileDiff(request)
 );
 
 function isInvalidInputError(error: unknown): boolean {

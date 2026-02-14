@@ -137,6 +137,20 @@ button[disabled] {
   text-align: left;
   border-bottom: 1px solid #334155;
   padding: 0.45rem 0.3rem;
+  vertical-align: top;
+}
+
+.row-clickable {
+  cursor: pointer;
+}
+
+.row-clickable:hover {
+  background: #1e293b;
+}
+
+.result code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #e2e8f0;
 }
 
 @media (max-width: 720px) {
