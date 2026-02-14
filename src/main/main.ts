@@ -1,7 +1,45 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { IPC_CHANNELS } from '../shared/ipc';
+import type { CompareRequest, CompareResponse } from '../shared/ipc';
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+
+ipcMain.handle(
+  IPC_CHANNELS.runCompare,
+  async (_event, request: CompareRequest): Promise<CompareResponse> => {
+    try {
+      if (!request.leftPath || !request.rightPath) {
+        return {
+          ok: false,
+          error: {
+            code: 'INVALID_INPUT',
+            message: 'Both leftPath and rightPath are required.'
+          }
+        };
+      }
+
+      return {
+        ok: true,
+        data: {
+          request,
+          message: 'IPC request received. Compare engine will be added later.',
+          requestId: crypto.randomUUID(),
+          generatedAt: new Date().toISOString()
+        }
+      };
+    } catch {
+      return {
+        ok: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Unexpected error while processing compare request.'
+        }
+      };
+    }
+  }
+);
 
 function createWindow(): void {
   const win = new BrowserWindow({

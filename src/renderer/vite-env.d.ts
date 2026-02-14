@@ -1,4 +1,5 @@
 /// <reference types="vite/client" />
+import type { DiffDirApi } from '../shared/ipc';
 
 declare global {
   interface Window {
@@ -6,6 +7,7 @@ declare global {
       name: string;
       version: string;
     };
+    diffDirApi: DiffDirApi;
   }
 }
 
