@@ -222,6 +222,11 @@ button[disabled] {
   gap: 0.55rem;
 }
 
+.error-panel {
+  border: 1px solid #7f1d1d;
+  background: #3f0d0d;
+}
+
 @media (max-width: 720px) {
   .drop-grid {
     grid-template-columns: 1fr;
