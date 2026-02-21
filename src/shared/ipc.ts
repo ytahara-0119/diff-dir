@@ -121,4 +121,5 @@ export interface DiffDirApi {
   getFileDiff: (request: FileDiffRequest) => Promise<FileDiffResponse>;
   selectDirectory: () => Promise<string | null>;
   resolveDirectoryPath: (rawPath: string) => Promise<string | null>;
+  getPathForFile: (file: File) => string | null;
 }
