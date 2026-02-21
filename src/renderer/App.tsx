@@ -8,7 +8,6 @@ import type {
 } from '../shared/ipc';
 
 type PaneSide = 'left' | 'right';
-type ElectronFile = File & { path?: string };
 type StatusFilter = 'all' | 'same' | 'different' | 'left_only' | 'right_only';
 type SortKey = 'relativePath' | 'status' | 'leftSize' | 'rightSize';
 type SortDirection = 'asc' | 'desc';
@@ -49,26 +48,20 @@ function App(): JSX.Element {
     };
   }, []);
 
-  const extractDirectoryPath = (
+  const extractDirectoryPath = async (
     event: DragEvent<HTMLElement>
-  ): string | null => {
-    const filePaths = Array.from(event.dataTransfer.files)
-      .map((file) => (file as ElectronFile).path)
-      .filter((value): value is string => Boolean(value));
+  ): Promise<string | null> => {
+    const filePaths = await collectDroppedFilePaths(event.dataTransfer);
     if (filePaths.length > 0) {
       return inferDropRootPath(filePaths);
     }
 
-    const uriList = event.dataTransfer.getData('text/uri-list');
-    if (uriList) {
-      const uriPath = firstPathFromUriList(uriList);
-      if (uriPath) {
-        return uriPath;
-      }
+    const directTextPath = extractPathFromKnownTextTypes(event.dataTransfer);
+    if (directTextPath) {
+      return directTextPath;
     }
 
-    const plainText = event.dataTransfer.getData('text/plain').trim();
-    return plainText || null;
+    return extractPathFromStringItems(event.dataTransfer.items);
   };
 
   const updatePath = (side: PaneSide, path: string) => {
@@ -84,7 +77,7 @@ function App(): JSX.Element {
     event.preventDefault();
     event.stopPropagation();
     setActiveDrop(null);
-    const rawPath = extractDirectoryPath(event);
+    const rawPath = await extractDirectoryPath(event);
     if (!rawPath) {
       return;
     }
@@ -505,6 +498,94 @@ function App(): JSX.Element {
       ) : null}
     </main>
   );
+}
+
+async function collectDroppedFilePaths(dataTransfer: DataTransfer): Promise<string[]> {
+  const fromFiles = await resolveFilePaths(Array.from(dataTransfer.files));
+  if (fromFiles.length > 0) {
+    return fromFiles;
+  }
+
+  const filesFromItems = Array.from(dataTransfer.items)
+    .filter((item) => item.kind === 'file')
+    .map((item) => item.getAsFile())
+    .filter((file): file is File => file !== null);
+  return resolveFilePaths(filesFromItems);
+}
+
+async function resolveFilePaths(files: File[]): Promise<string[]> {
+  if (files.length === 0) {
+    return [];
+  }
+
+  const paths = files.map((file) => {
+    const legacyPath = (file as File & { path?: string }).path;
+    if (legacyPath) {
+      return legacyPath;
+    }
+    if (!window.diffDirApi?.getPathForFile) {
+      return null;
+    }
+    try {
+      return window.diffDirApi.getPathForFile(file);
+    } catch {
+      return null;
+    }
+  });
+  return paths.filter((value): value is string => Boolean(value));
+}
+
+function extractPathFromKnownTextTypes(dataTransfer: DataTransfer): string | null {
+  const candidates = ['text/uri-list', 'public.file-url', 'text/plain'];
+  for (const type of candidates) {
+    const value = dataTransfer.getData(type);
+    const resolved = normalizeDroppedTextPath(value);
+    if (resolved) {
+      return resolved;
+    }
+  }
+  return null;
+}
+
+async function extractPathFromStringItems(
+  items: DataTransferItemList
+): Promise<string | null> {
+  const textItems = Array.from(items).filter((item) => item.kind === 'string');
+  for (const item of textItems) {
+    const value = await readDataTransferString(item);
+    const resolved = normalizeDroppedTextPath(value);
+    if (resolved) {
+      return resolved;
+    }
+  }
+  return null;
+}
+
+function readDataTransferString(item: DataTransferItem): Promise<string> {
+  return new Promise((resolve) => {
+    try {
+      item.getAsString((value) => resolve(value ?? ''));
+    } catch {
+      resolve('');
+    }
+  });
+}
+
+function normalizeDroppedTextPath(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const uriPath = firstPathFromUriList(trimmed);
+  if (uriPath) {
+    return uriPath;
+  }
+
+  const noQuotes = trimmed.replace(/^['"]|['"]$/g, '');
+  if (!noQuotes || noQuotes.includes('://')) {
+    return null;
+  }
+  return noQuotes;
 }
 
 function formatDiffHint(item: CompareItem): string {
